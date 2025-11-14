@@ -39,8 +39,6 @@ impl Harness {
         let persistent_addr = main_addr + 0x18C; // After getopt parsing
         let breakpoint_addr = main_addr + 0x160; // Loop breakpoint
 
-        eprintln!("main @ {main_addr:#x}, persistent @ {persistent_addr:#x}, breakpoint @ {breakpoint_addr:#x}");
-
         // Run until we reach the persistent address
         qemu.entry_break(persistent_addr);
         qemu.set_breakpoint(breakpoint_addr);
@@ -50,14 +48,6 @@ impl Harness {
         let register_state: Vec<u64> = (0..num_regs)
             .map(|reg_idx| qemu.read_reg(reg_idx).unwrap_or(0))
             .collect();
-
-        // print all saved registers
-        for (i, reg) in register_state.iter().enumerate() {
-            // Check if this is the PC register
-            let is_pc = i == Regs::Pc as usize;
-            let label = if is_pc { "PC" } else { "reg" };
-            eprintln!("[Harness::init] Register {i} ({label}): {reg:#x}");
-        }
 
         // Initialize the harness
         Ok(Harness {
@@ -76,52 +66,22 @@ impl Harness {
 
     /// Run the harness
     pub fn run(&self, _input: &BytesInput) -> ExitKind {
-        eprintln!(
-            "[Harness::run] ===== RUN CALLED ====="
-        );
-        
         // State restoration (memory + registers) is now handled in HooksModule::pre_exec
         // to ensure they're restored atomically. We just need to ensure the breakpoint is set and run.
-        let pc_before = self.qemu.read_reg(Regs::Pc).unwrap_or(0);
-        let sp_before = self.qemu.read_reg(Regs::Sp).unwrap_or(0);
-      
-        eprintln!(
-            "[Harness::run] PC before run: {:#x}, SP before run: {:#x}, persistent_addr: {:#x}, breakpoint_addr: {:#x}",
-            pc_before,
-            sp_before,
-            self.persistent_addr,
-            self.breakpoint_addr
-        );
-
-        eprintln!("[Harness::run] About to call qemu.run()...");
-        std::io::Write::flush(&mut std::io::stderr()).ok();
-        
         let result = unsafe { self.qemu.run() };
-        let pc_after_run = self.qemu.read_reg(Regs::Pc).unwrap_or(0);
-        let sp_after_run = self.qemu.read_reg(Regs::Sp).unwrap_or(0);
-        eprintln!("[Harness::run] PC after run: {:#x}, SP after run: {:#x}", pc_after_run, sp_after_run);
-        std::io::Write::flush(&mut std::io::stderr()).ok();
         
         match result {
             Ok(libafl_qemu::QemuExitReason::Breakpoint(addr)) => {
                 if addr == self.breakpoint_addr {
-                    eprintln!("[Harness::run] Hit expected breakpoint at {:#x}", addr);
                     ExitKind::Ok
                 } else {
-                    eprintln!(
-                        "[Harness::run] WARNING: Hit unexpected breakpoint: {:#x} (expected {:#x})",
-                        addr,
-                        self.breakpoint_addr
-                    );
                     ExitKind::Ok
                 }
             }
-            Ok(reason) => {
-                eprintln!("[Harness::run] WARNING: Unexpected exit reason: {:?}", reason);
+            Ok(_reason) => {
                 ExitKind::Ok
             }
-            Err(e) => {
-                eprintln!("[Harness::run] ERROR: QEMU error: {:?}", e);
+            Err(_e) => {
                 ExitKind::Crash
             }
         }

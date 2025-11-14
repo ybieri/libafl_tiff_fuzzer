@@ -8,7 +8,7 @@ use libafl::{
     },
     executors::{Executor, ExitKind, ShadowExecutor},
     feedback_and_fast, feedback_or, feedback_or_fast,
-    feedbacks::{CrashFeedback, MaxMapFeedback, TimeFeedback, TimeoutFeedback},
+    feedbacks::{CrashFeedback, MaxMapFeedback, TimeFeedback},
     fuzzer::{Evaluator, Fuzzer, StdFuzzer},
     inputs::{BytesInput, Input},
     mutators::{

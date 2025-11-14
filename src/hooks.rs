@@ -129,29 +129,21 @@ where
         if !self.register_state.is_empty() {
             // Check what PC is in saved state
             let saved_pc_idx = Regs::Pc as usize;
-            let saved_pc = if saved_pc_idx < self.register_state.len() {
+            let _saved_pc = if saved_pc_idx < self.register_state.len() {
                 self.register_state[saved_pc_idx]
             } else {
                 0
             };
-            eprintln!("[HooksModule::pre_exec] Saved PC in register_state[{}]: {:#x}, persistent_addr: {:#x}", 
-                     saved_pc_idx, saved_pc, self.persistent_addr);
             
             if let Err(e) = self.restore_registers(qemu) {
                 log::error!("[HooksModule] Failed to restore registers: {}", e);
-                eprintln!("[HooksModule::pre_exec] ERROR: Failed to restore registers: {}", e);
             } else {
                 let pc_after_restore = qemu.read_reg(Regs::Pc).unwrap_or(0);
-                eprintln!("[HooksModule::pre_exec] PC after restore: {:#x} (expected {:#x})", 
-                         pc_after_restore, self.persistent_addr);
                 
                 if pc_after_restore != self.persistent_addr {
-                    eprintln!("[HooksModule::pre_exec] WARNING: PC mismatch! Restored to {:#x} but expected {:#x}", 
-                             pc_after_restore, self.persistent_addr);
                 }
             }
         } else {
-            eprintln!("[HooksModule::pre_exec] WARNING: register_state is empty!");
         }
     
         // Copy fuzzer input into mmap region
@@ -207,11 +199,9 @@ where
         // Anonymous mmap (used by malloc) should execute normally
         if fd >= 0 && (flags & MAP_ANONYMOUS) == 0 {
             // This is a file-based mmap - intercept it
-            eprintln!("[HooksModule] mmap syscall intercepted (file-based), returning {:#x}", hooks_module.mmap_addr);
             return SyscallHookResult::Skip(hooks_module.mmap_addr);
         } else {
             // Anonymous mmap or invalid fd - let it execute normally
-            eprintln!("[HooksModule] mmap syscall not intercepted (anonymous or invalid fd: {})", fd);
             return SyscallHookResult::Run;
         }
     } else if syscall == SYS_munmap as i32 {
@@ -219,7 +209,6 @@ where
         // int munmap(void *addr, size_t length);
         if x0 == hooks_module.mmap_addr {
             // It's our region, return success but don't actually unmap
-            eprintln!("[HooksModule] munmap syscall intercepted for our region, returning success");
             return SyscallHookResult::Skip(0);
         } else {
             // Not our region, let it execute normally
