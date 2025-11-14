@@ -43,15 +43,7 @@ impl HooksModule {
         }
     }
 
-    /// Get the mmap address (for use in harness)
-    pub fn mmap_addr(&self) -> GuestAddr {
-        self.mmap_addr
-    }
 
-    /// Get the mmap size
-    pub fn mmap_size(&self) -> usize {
-        self.mmap_size
-    }
 
     /// Set the persistent state (called from Harness::init)
     pub fn set_persistent_state(

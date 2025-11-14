@@ -168,7 +168,16 @@ where
             .qemu_parameters(args)
             .modules(modules)
             .build()?;
-        let harness = Harness::init(emulator.qemu()).expect("Error setting up harness.");
+        
+        let harness = match Harness::init(emulator.qemu()) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("[FATAL] Failed to initialize harness: {:?}", e);
+                eprintln!("[FATAL] Binary path: {:?}", emulator.qemu().binary_path());
+                return Err(e);
+            }
+        };
+        
         if let Some(hooks_module) = emulator
             .modules_mut()
             .modules_mut()
@@ -220,7 +229,8 @@ where
 
         // A feedback to choose if an input is a solution or not
         let mut objective = feedback_and_fast!(
-            feedback_or_fast!(CrashFeedback::new(), TimeoutFeedback::new()),
+            //feedback_or_fast!(CrashFeedback::new(), TimeoutFeedback::new()),
+            feedback_or_fast!(CrashFeedback::new(), ), // only care about crashes
             map_objective
         );
 

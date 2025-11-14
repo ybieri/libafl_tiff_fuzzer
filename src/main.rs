@@ -19,7 +19,10 @@ use crate::fuzzer::Fuzzer;
 
 #[cfg(target_os = "linux")]
 pub fn main() {
-    Fuzzer::new().fuzz().unwrap();
+    if let Err(e) = Fuzzer::new().fuzz() {
+        eprintln!("[FATAL] Fuzzer error: {:?}", e);
+        std::process::exit(1);
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
