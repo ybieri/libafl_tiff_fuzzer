@@ -6,7 +6,7 @@ use libafl_qemu::{
     arch::Regs,
     modules::{EmulatorModule, EmulatorModuleTuple},
     qemu::{Hook, SyscallHookResult},
-    ArchExtras, GuestAddr, GuestReg, MmapPerms, Qemu,
+    GuestAddr, MmapPerms, Qemu,
 };
 
 use syscall_numbers::aarch64::{SYS_read, SYS_mmap, SYS_munmap, SYS_exit, SYS_exit_group};
@@ -135,9 +135,31 @@ where
     {
         // Restore registers if we have saved state
         if !self.register_state.is_empty() {
+            // Check what PC is in saved state
+            let saved_pc_idx = Regs::Pc as usize;
+            let saved_pc = if saved_pc_idx < self.register_state.len() {
+                self.register_state[saved_pc_idx]
+            } else {
+                0
+            };
+            eprintln!("[HooksModule::pre_exec] Saved PC in register_state[{}]: {:#x}, persistent_addr: {:#x}", 
+                     saved_pc_idx, saved_pc, self.persistent_addr);
+            
             if let Err(e) = self.restore_registers(qemu) {
                 log::error!("[HooksModule] Failed to restore registers: {}", e);
+                eprintln!("[HooksModule::pre_exec] ERROR: Failed to restore registers: {}", e);
+            } else {
+                let pc_after_restore = qemu.read_reg(Regs::Pc).unwrap_or(0);
+                eprintln!("[HooksModule::pre_exec] PC after restore: {:#x} (expected {:#x})", 
+                         pc_after_restore, self.persistent_addr);
+                
+                if pc_after_restore != self.persistent_addr {
+                    eprintln!("[HooksModule::pre_exec] WARNING: PC mismatch! Restored to {:#x} but expected {:#x}", 
+                             pc_after_restore, self.persistent_addr);
+                }
             }
+        } else {
+            eprintln!("[HooksModule::pre_exec] WARNING: register_state is empty!");
         }
     
         // Copy fuzzer input into mmap region
@@ -182,13 +204,25 @@ where
         None => return SyscallHookResult::Run,
     };
 
-    if syscall == SYS_mmap {
-        // mmap syscall: return our pre-allocated region address
-        // void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-        // We ignore the parameters and just return our pre-allocated address
-        eprintln!("[HooksModule] mmap syscall intercepted, returning {:#x}", hooks_module.mmap_addr);
-        return SyscallHookResult::Skip(hooks_module.mmap_addr);
-    } else if syscall == SYS_munmap {
+    if syscall == SYS_mmap as i32 {
+        // Only intercept file-based mmap, not anonymous mmap used by malloc
+        // MAP_ANONYMOUS is 0x20 (32) on Linux
+        const MAP_ANONYMOUS: i32 = 0x20;
+        let flags = _x3 as i32;
+        let fd = _x4 as i32;
+        
+        // Only intercept if it's a file-based mmap (fd >= 0 and not MAP_ANONYMOUS)
+        // Anonymous mmap (used by malloc) should execute normally
+        if fd >= 0 && (flags & MAP_ANONYMOUS) == 0 {
+            // This is a file-based mmap - intercept it
+            eprintln!("[HooksModule] mmap syscall intercepted (file-based), returning {:#x}", hooks_module.mmap_addr);
+            return SyscallHookResult::Skip(hooks_module.mmap_addr);
+        } else {
+            // Anonymous mmap or invalid fd - let it execute normally
+            eprintln!("[HooksModule] mmap syscall not intercepted (anonymous or invalid fd: {})", fd);
+            return SyscallHookResult::Run;
+        }
+    } else if syscall == SYS_munmap as i32 {
         // munmap syscall: ignore if it's our region, otherwise let it execute
         // int munmap(void *addr, size_t length);
         if x0 == hooks_module.mmap_addr {
@@ -199,11 +233,11 @@ where
             // Not our region, let it execute normally
             return SyscallHookResult::Run;
         }
-    } else if syscall == SYS_read {
+    } else if syscall == SYS_read as i32 {
         // read syscall: read from our mmapped region
         // ssize_t read(int fd, void *buf, size_t count);
         return handle_read_syscall(qemu, hooks_module, x1, x2);
-    } else if syscall == SYS_exit || syscall == SYS_exit_group {
+    } else if syscall == SYS_exit as i32 || syscall == SYS_exit_group as i32 {
         // Restore registers to jump back to persistent_addr
         // Memory will be restored by SnapshotModule::pre_exec() on next iteration
         if hooks_module.restore_registers(qemu).is_err() {

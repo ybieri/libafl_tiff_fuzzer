@@ -1,11 +1,10 @@
 use libafl::{executors::ExitKind, inputs::BytesInput, Error};
-use libafl_qemu::{elf::EasyElf, ArchExtras, GuestAddr, GuestReg, Qemu, Regs};
+use libafl_qemu::{elf::EasyElf, GuestAddr, Qemu, Regs};
 
 pub struct Harness {
     qemu: Qemu,
     pub persistent_addr: GuestAddr, // Address to reset to (main + 0x18C, after getopt)
     pub breakpoint_addr: GuestAddr, // Address to break at in persistent loop (main + 0x160)
-    _input_addr: GuestAddr,         // Pre-allocated mmap region for fuzzer input
     pub register_state: Vec<u64>,   // Saved state of all registers
 }
 
@@ -35,7 +34,7 @@ impl Harness {
 
     /// Initialize the emulator, run to the persistent address (main + 0x18C) and return the [`Harness`] struct
     /// `input_addr` should be set after initialization by retrieving it from HooksModule
-    pub fn init(qemu: Qemu, input_addr: GuestAddr) -> Result<Harness, Error> {
+    pub fn init(qemu: Qemu) -> Result<Harness, Error> {
         let main_addr = Self::find_main(qemu)?;
         let persistent_addr = main_addr + 0x18C; // After getopt parsing
         let breakpoint_addr = main_addr + 0x160; // Loop breakpoint
@@ -52,12 +51,19 @@ impl Harness {
             .map(|reg_idx| qemu.read_reg(reg_idx).unwrap_or(0))
             .collect();
 
+        // print all saved registers
+        for (i, reg) in register_state.iter().enumerate() {
+            // Check if this is the PC register
+            let is_pc = i == Regs::Pc as usize;
+            let label = if is_pc { "PC" } else { "reg" };
+            eprintln!("[Harness::init] Register {i} ({label}): {reg:#x}");
+        }
+
         // Initialize the harness
         Ok(Harness {
             qemu,
             persistent_addr,
             breakpoint_addr,
-            _input_addr: input_addr,
             register_state,
         })
     }
@@ -93,7 +99,6 @@ impl Harness {
         let result = unsafe { self.qemu.run() };
         let pc_after_run = self.qemu.read_reg(Regs::Pc).unwrap_or(0);
         let sp_after_run = self.qemu.read_reg(Regs::Sp).unwrap_or(0);
-        eprintln!("[Harness::run] qemu.run() returned after {:?}: {:?}", run_elapsed, result);
         eprintln!("[Harness::run] PC after run: {:#x}, SP after run: {:#x}", pc_after_run, sp_after_run);
         std::io::Write::flush(&mut std::io::stderr()).ok();
         

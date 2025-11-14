@@ -47,7 +47,7 @@ use libafl_qemu::{
 use libafl_targets::{edges_map_mut_ptr, EDGES_MAP_DEFAULT_SIZE, MAX_EDGES_FOUND};
 use typed_builder::TypedBuilder;
 
-use crate::{harness::Harness, options::FuzzerOptions};
+use crate::{hooks::HooksModule, harness::Harness, options::FuzzerOptions};
 
 pub type ClientState =
     StdState<InMemoryOnDiskCorpus<BytesInput>, BytesInput, StdRand, OnDiskCorpus<BytesInput>>;
@@ -148,6 +148,7 @@ where
 
         let mut snapshot_module = SnapshotModule::with_filters(AsanGuestModule::snapshot_filters());
 
+        let hooks_module = HooksModule::new();
         /*
          * Since the generics for the modules are already excessive when taking
          * into accout asan, asan guest mode, cmplog, and injection, we will
@@ -161,7 +162,8 @@ where
 
         let modules = modules
             .prepend(edge_coverage_module)
-            .prepend(snapshot_module);
+            .prepend(snapshot_module)
+            .prepend(hooks_module);
         let mut emulator = Emulator::empty()
             .qemu_parameters(args)
             .modules(modules)
@@ -379,16 +381,16 @@ where
 
     #[allow(clippy::type_complexity)] // TODO: make less complex
     fn reset_executor_snapshot_module<'a, C, CM, ED, EM, ET, H, I, OT, S, SM, Z>(
-        executor: &mut QemuExecutor<'a, C, CM, ED, EM, (SnapshotModule, ET), H, I, OT, S, SM, Z>,
+        executor: &mut QemuExecutor<'a, C, CM, ED, EM, (HooksModule, (SnapshotModule, ET)), H, I, OT, S, SM, Z>,
         qemu: Qemu,
     ) where
         ET: EmulatorModuleTuple<I, S>,
         H: for<'e, 's, 'i> FnMut(
-            &'e mut Emulator<C, CM, ED, (SnapshotModule, ET), I, S, SM>,
+            &'e mut Emulator<C, CM, ED, (HooksModule, (SnapshotModule, ET)), I, S, SM>,
             &'s mut S,
             &'i I,
         ) -> ExitKind,
-        I: Input + Unpin,
+        I: Input + Unpin + libafl::inputs::HasTargetBytes + libafl_bolts::HasLen,
         OT: ObserversTuple<I, S>,
         S: HasCorpus<I> + HasCurrentCorpusId + HasSolutions<I> + HasExecutions + Unpin,
     {
@@ -397,14 +399,14 @@ where
             .exposed_executor_state_mut()
             .modules_mut()
             .modules_mut()
-            .0
+            .1.0
             .reset(qemu);
     }
 
     #[allow(clippy::type_complexity)]
     fn reset_shadow_executor_snapshot_module<'a, C, CM, ED, EM, ET, H, I, OT, S, SM, SOT, Z>(
         executor: &mut ShadowExecutor<
-            QemuExecutor<'a, C, CM, ED, EM, (SnapshotModule, ET), H, I, OT, S, SM, Z>,
+            QemuExecutor<'a, C, CM, ED, EM, (HooksModule, (SnapshotModule, ET)), H, I, OT, S, SM, Z>,
             I,
             S,
             SOT,
@@ -413,11 +415,11 @@ where
     ) where
         ET: EmulatorModuleTuple<I, S>,
         H: for<'e, 's, 'i> FnMut(
-            &'e mut Emulator<C, CM, ED, (SnapshotModule, ET), I, S, SM>,
+            &'e mut Emulator<C, CM, ED, (HooksModule, (SnapshotModule, ET)), I, S, SM>,
             &'s mut S,
             &'i I,
         ) -> ExitKind,
-        I: Input + Unpin,
+        I: Input + Unpin + libafl::inputs::HasTargetBytes + libafl_bolts::HasLen,
         OT: ObserversTuple<I, S>,
         S: HasCorpus<I> + HasCurrentCorpusId + HasSolutions<I> + HasExecutions + Unpin,
         SOT: ObserversTuple<I, S>,
@@ -428,7 +430,7 @@ where
             .exposed_executor_state_mut()
             .modules_mut()
             .modules_mut()
-            .0
+            .1.0
             .reset(qemu);
     }
 
