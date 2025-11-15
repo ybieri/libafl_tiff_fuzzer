@@ -200,7 +200,7 @@ single_dev_strace: harness build
       --profile dev \
       --features "simplemgr,{{ ARCH }}" \
       --target-dir {{ TARGET_DIR }}
-    strace -tt -yy -y -f -e trace=openat,open,read,write,pipe,socket,dup2,clone,close -s 10000 -o /tmp/strace.log \
+    strace -tt -yy -y -f -e trace=openat,open,read,write,pipe,socket,dup2,clone,close -s 10000 -o ./strace.log \
      {{ TARGET_DIR }}/debug/qemu_launcher \
         --input ./corpus \
         --output {{ TARGET_DIR }}/output/ \
