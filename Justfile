@@ -103,10 +103,11 @@ tiffinfo: download_tiff build_dir_tiff
         make -C {{ TIFF_DIR }} install
     
      # Create corpus directory with test images
+    cd {{ source_directory() }}
     if [ ! -d "corpus" ]; then
         mkdir -p corpus
         if [ -d "{{ TIFF_DIR }}/test/images" ]; then
-            cp {{ TIFF_DIR }}/test/images/*.tiff corpus/ 2>/dev/null || true
+            cp {{ TIFF_DIR }}/test/images/*.tiff corpus/ 
         fi
     fi
 
