@@ -1,8 +1,18 @@
-import "../LibAFL/just/libafl-qemu.just"
-
 #  RUST_LOG=debug env ARCH=aarch64 LIBAFL_FUZZBENCH_DEBUG=1 RUST_BACKTRACE=1 just single_dev 
 
+# Variables from libafl.just
+PROFILE := env("PROFILE", "release")
+FUZZER_EXTENSION := if os_family() == "windows" { ".exe" } else { "" }
+PROFILE_DIR := if PROFILE == "dev" { "debug" } else { "release" }
+TARGET_DIR := absolute_path(env("TARGET_DIR", "target"))
+BUILD_DIR := TARGET_DIR / PROFILE_DIR
+
+# Variables from libafl-qemu.just
+ARCH := env("ARCH", "x86_64")
+DOTENV := source_directory() / "envs" / ".env." + ARCH
+
 FUZZER_NAME := "qemu_launcher"
+FUZZER := BUILD_DIR / FUZZER_NAME + FUZZER_EXTENSION
 
 # Determine target triple based on ARCH
 TARGET_TRIPLE := if ARCH == "aarch64" { "aarch64-unknown-linux-gnu" } else if ARCH == "x86_64" { "x86_64-unknown-linux-gnu" } else { "x86_64-unknown-linux-gnu" }
@@ -62,7 +72,7 @@ download_tiff:
 tiffinfo: download_tiff build_dir_tiff
     #!/bin/bash
 
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
 
     # Clean old build artifacts
     cd {{ TIFF_DIR }} && \
@@ -108,7 +118,7 @@ harness: tiffinfo
 [unix]
 run: harness build
     #!/bin/bash
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
     export ROOTFS_PATH={{ TARGET_DIR }}/rootfs
     export LIBTIFF_PATH={{ TARGET_DIR }}/build/lib
     export QEMU_LD_PREFIX={{ TARGET_DIR }}/rootfs
@@ -127,7 +137,7 @@ run: harness build
 [unix]
 run_snapshots: harness build
     #!/bin/bash
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
     export ROOTFS_PATH={{ TARGET_DIR }}/rootfs
     export LIBTIFF_PATH={{ TARGET_DIR }}/build/lib
     export QEMU_LD_PREFIX={{ TARGET_DIR }}/rootfs
@@ -147,7 +157,7 @@ run_snapshots: harness build
 [unix]
 run_snapshots_debug: harness build
     #!/bin/bash
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
     export ROOTFS_PATH={{ TARGET_DIR }}/rootfs
     export LIBTIFF_PATH={{ TARGET_DIR }}/build/lib
     export QEMU_LD_PREFIX={{ TARGET_DIR }}/rootfs
@@ -215,7 +225,7 @@ single_dev_strace: harness build
 test_inner: harness build
     #!/bin/bash
 
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
 
     export QEMU_LAUNCHER={{ FUZZER }}
 
@@ -286,7 +296,7 @@ single_dev:
 asan_host: harness build
     #!/bin/bash
 
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
     CUSTOM_LIBAFL_QEMU_ASAN_PATH={{ BUILD_DIR }}/$CROSS_TARGET/{{ PROFILE_DIR }}/libafl_qemu_asan_host.so \
     {{ FUZZER }} \
         --input ./corpus \
@@ -300,7 +310,7 @@ asan_host: harness build
 asan_guest: harness build
     #!/bin/bash
 
-    source {{ DOTENV }}
+    [ -f {{ DOTENV }} ] && source {{ DOTENV }} || true
     CUSTOM_LIBAFL_QEMU_ASAN_PATH={{ BUILD_DIR }}/$CROSS_TARGET/{{ PROFILE_DIR }}/libafl_qemu_asan_guest.so \
     {{ FUZZER }} \
         --input ./corpus \
