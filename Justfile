@@ -340,14 +340,14 @@ rootfs:
         # QEMU expects /lib/ld-linux-aarch64.so.1 but debootstrap puts it in /usr/lib/aarch64-linux-gnu/
         sudo mkdir -p {{ ROOTFS_DIR }}/lib
         if [ -f "{{ ROOTFS_DIR }}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" ]; then
-            sudo cp {{ ROOTFS_DIR }}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 {{ ROOTFS_DIR }}/lib/ld-linux-aarch64.so.1
+            sudo cp -fL{{ ROOTFS_DIR }}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 {{ ROOTFS_DIR }}/lib/ld-linux-aarch64.so.1
         fi
     else
         echo "Rootfs already exists at {{ ROOTFS_DIR }}"
         # Ensure copy exists even if rootfs already exists
         if [ ! -f "{{ ROOTFS_DIR }}/lib/ld-linux-aarch64.so.1" ] && [ -f "{{ ROOTFS_DIR }}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" ]; then
             sudo mkdir -p {{ ROOTFS_DIR }}/lib
-            sudo cp {{ ROOTFS_DIR }}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 {{ ROOTFS_DIR }}/lib/ld-linux-aarch64.so.1
+            sudo cp -fL {{ ROOTFS_DIR }}/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 {{ ROOTFS_DIR }}/lib/ld-linux-aarch64.so.1
         fi
     fi
 
